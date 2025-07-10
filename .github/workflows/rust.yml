@@ -1,0 +1,61 @@
+name: Rust CI/CD Pipeline
+
+on:
+  push:
+    branches: 
+      - 'feature/**'
+      - 'bugfix/**'
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    container:
+      image: rust:latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build application
+        run: cargo build --verbose
+
+      - name: Run tests
+        run: cargo test --verbose
+
+      - name: Create release artifact
+        run: |
+          mkdir artifact
+          cp target/debug/clear-tags-rs artifact/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: rust-binary
+          path: artifact
+
+  trigger-ansible:
+    needs: build-and-test
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger deployment pipeline
+        uses: actions/github-script@v6
+        with:
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: 'ermektaychibekov',
+              repo: 'pipeline',
+              workflow_id: 'full_pipeline.yml',
+              ref: 'main',
+              inputs: {
+                application: 'clear-music-tags-rs',
+                commit_sha: context.sha,
+                environment: '${{ github.ref == "refs/heads/main" ? "staging" : "production" }}',
+                artifact_url: `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
+              }
+            })
