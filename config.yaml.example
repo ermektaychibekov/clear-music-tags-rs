@@ -1,0 +1,7 @@
+remove_strings:
+  - "https://djsoundtop.com"
+  - "https://electronicfresh.com"
+  - "djsoundtop.com"
+  - "electronicfresh.com"
+paths:
+  - "/path/to/music"
