@@ -1,24 +1,37 @@
-variables:
-  ANSIBLE_CONFIG: "ansible/ansible.cfg"
-  TARGET_ENV: "${CI_ENVIRONMENT_NAME}"
-  EXECUTION_STRATEGY: "containerized"
-
 stages:
-  - validate
-  - build
-  - deploy
+  - build-test
+  - trigger-deployment
 
-ansible_pipeline:
-  stage: deploy
-  image:
-    name: quay.io/ansible/ansible-runner:latest
+variables:
+  PIPELINE_REPO: "gitlab.com/ermektaychibekov/pipeline.git"
+
+build-test:
+  stage: build-test
+  image: 
+    name: rust:latest
     entrypoint: [""]
   script:
-    - ansible-playbook 
-      -i inventories/${TARGET_ENV} 
-      playbooks/full_pipeline.yml
-      -e source_repository="${CI_PROJECT_URL}"
-      -e commit_sha="${CI_COMMIT_SHA}"
-  environment:
-    name: "${TARGET_ENV}"
-    url: "https://${CI_PROJECT_NAME}-${TARGET_ENV}.example.com"
+    - go build -o tag-cleaner ./...
+    - go test -v ./...
+  artifacts:
+    paths:
+      - tag-cleaner
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH != "main"
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+
+trigger-deployment:
+  stage: trigger-deployment
+  image: registry.gitlab.com/gitlab-org/cli:latest
+  script:
+    - glab auth login --with-token $GITLAB_TOKEN
+    - |
+      glab ci run \
+        --branch main \
+        --variables "APPLICATION_NAME=$CI_PROJECT_NAME" \
+        --variables "COMMIT_SHA=$CI_COMMIT_SHA" \
+        --variables "ARTIFACT_URL=$CI_JOB_URL" \
+        --variables "TARGET_ENVIRONMENT=${CI_COMMIT_BRANCH == "main" ? "staging" : "production"}" \
+        -R $PIPELINE_REPO
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH =~ /^release\/.*/
