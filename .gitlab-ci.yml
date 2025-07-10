@@ -1,0 +1,24 @@
+variables:
+  ANSIBLE_CONFIG: "ansible/ansible.cfg"
+  TARGET_ENV: "${CI_ENVIRONMENT_NAME}"
+  EXECUTION_STRATEGY: "containerized"
+
+stages:
+  - validate
+  - build
+  - deploy
+
+ansible_pipeline:
+  stage: deploy
+  image:
+    name: quay.io/ansible/ansible-runner:latest
+    entrypoint: [""]
+  script:
+    - ansible-playbook 
+      -i inventories/${TARGET_ENV} 
+      playbooks/full_pipeline.yml
+      -e source_repository="${CI_PROJECT_URL}"
+      -e commit_sha="${CI_COMMIT_SHA}"
+  environment:
+    name: "${TARGET_ENV}"
+    url: "https://${CI_PROJECT_NAME}-${TARGET_ENV}.example.com"
